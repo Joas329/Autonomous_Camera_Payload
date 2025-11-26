@@ -3,6 +3,7 @@ add_library(camera STATIC
     LastFrame.cpp
     Ticker.cpp
     IRCamera.cpp
+    TelopsCamera.cpp
 )
 
 target_include_directories(camera PUBLIC
