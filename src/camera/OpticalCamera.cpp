@@ -306,9 +306,9 @@ void OpticalCamera::run(std::stop_token stoken) {
 
     cam->Init();
 
-    auto& nodeMap = cam->GetNodeMap();           // device features
-    auto& tlDev = cam->GetTLDeviceNodeMap();     // TL device
-    auto& sNodeMap = cam->GetTLStreamNodeMap();  // TL stream
+    auto& nodeMap = cam->GetNodeMap();
+    auto& tlDev = cam->GetTLDeviceNodeMap();
+    auto& sNodeMap = cam->GetTLStreamNodeMap();
 
     initCameraParams(nodeMap, sNodeMap, tlDev, kFPS);
 
@@ -318,7 +318,6 @@ void OpticalCamera::run(std::stop_token stoken) {
     using clock = std::chrono::steady_clock;
     const auto period = std::chrono::milliseconds(
         static_cast<int>(std::llround(1000.0 / kFPS)));
-    // auto next_tick = clock::now() + period;
 
     int consec_incomplete = 0;
 
@@ -329,6 +328,7 @@ void OpticalCamera::run(std::stop_token stoken) {
     auto us = [](auto dt) {
       return std::chrono::duration_cast<std::chrono::microseconds>(dt).count();
     };
+
     while (!stoken.stop_requested()) {
       ticker_.waitNext(seen);
 
@@ -340,17 +340,12 @@ void OpticalCamera::run(std::stop_token stoken) {
         const unsigned timeout_ms = static_cast<unsigned>(
             std::max<int>(static_cast<int>(period.count()) + 250, 1000));
         raw = cam->GetNextImage(timeout_ms);
-      } catch (const std::exception& e) {
-        SPDLOG_WARN("[OPTICAL CAMERA] GetNextImage timeout/err: {}", e.what());
-        continue;
       } catch (...) {
-        SPDLOG_WARN("[OPTICAL CAMERA] GetNextImage timeout/err (unknown)");
+        SPDLOG_WARN("[OPTICAL CAMERA] GetNextImage timeout/err");
         continue;
       }
 
       const auto t_cap_end = clock::now();
-
-      // const auto t_acq_end = clock::now();
 
       if (!raw || raw->IsIncomplete()) {
         ++consec_incomplete;
@@ -358,22 +353,13 @@ void OpticalCamera::run(std::stop_token stoken) {
           SPDLOG_WARN(
               "[OPTICAL CAMERA] Incomplete frame: status {} (streak={})",
               static_cast<int>(raw->GetImageStatus()), consec_incomplete);
-          try {
-            raw->Release();
-          } catch (...) {}
+          try { raw->Release(); } catch (...) {}
         }
         if (consec_incomplete >= 10) {
-          SPDLOG_WARN(
-              "[OPTICAL CAMERA] Too many incompletes; restarting acquisition");
-          try {
-            if (started_acq)
-              cam->EndAcquisition();
-          } catch (...) {}
+          SPDLOG_WARN("[OPTICAL CAMERA] Restarting acquisition");
+          try { if (started_acq) cam->EndAcquisition(); } catch (...) {}
           std::this_thread::sleep_for(std::chrono::milliseconds(50));
-          try {
-            cam->BeginAcquisition();
-            started_acq = true;
-          } catch (...) {}
+          try { cam->BeginAcquisition(); started_acq = true; } catch (...) {}
           consec_incomplete = 0;
         }
         continue;
@@ -384,14 +370,11 @@ void OpticalCamera::run(std::stop_token stoken) {
       if (raw->GetPixelFormat() != PixelFormat_Mono8) {
         try {
           ImageProcessor proc;
-          proc.SetColorProcessing(
-              SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR);
+          proc.SetColorProcessing(SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR);
           mono = proc.Convert(raw, PixelFormat_Mono8);
         } catch (...) {
           SPDLOG_WARN("[OPTICAL CAMERA] Convert to Mono8 failed");
-          try {
-            raw->Release();
-          } catch (...) {}
+          try { raw->Release(); } catch (...) {}
           continue;
         }
       }
@@ -410,98 +393,55 @@ void OpticalCamera::run(std::stop_token stoken) {
         std::memcpy(rawBytes.data(), src_raw, raw_sz);
 
         if (!logger.enqueue(std::move(rawBytes))) {
-          SPDLOG_WARN("[OPTICAL CAMERA] RAW enqueue dropped (queue full)");
+          SPDLOG_WARN("[OPTICAL CAMERA] RAW enqueue dropped");
         }
       }
       const auto t_enq_end = clock::now();
 
-      // std::vector<uint8_t> jpgBytes;
-
-      // const unsigned char* src =
-      //     static_cast<const unsigned char*>(mono->GetData());
-      // const auto t_enc_start = clock::now();
-      // bool enc_ok =
-      //     encodeJpegMono8(src, static_cast<int>(w), static_cast<int>(h),
-      //                     static_cast<int>(stride), 85, jpgBytes);
-
-      // const auto t_enc_end = clock::now();
-
-      // SPDLOG_INFO("[OPTICAL CAMERA] JPG Size: {}", jpgBytes.size());
-
-      // if (enc_ok) {
-      //   const std::string stem = make_filename();
-      //   savedPath = kOutputDir / std::filesystem::path(stem).filename();
-      //   savedPath.replace_extension(".jpg");
-
-      //   bool wrote_ok = writeBytes(savedPath, jpgBytes);
-      //   const auto t_io_end = clock::now();
-
-      //   SPDLOG_INFO("[OPTICAL CAMERA] encode={}ms write={}ms path={}",
-      //               std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                   t_enc_end - t_enc_start)
-      //                   .count(),
-      //               std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                   t_io_end - t_enc_start)
-      //                   .count(),
-      //               wrote_ok ? savedPath.string() : "(failed)");
-
-      //   pushJpegToBuffer(std::move(jpgBytes), w, h, stride, /*channels*/ 1);
-      // } else {
-      //   SPDLOG_WARN("[OPTICAL CAMERA] JPEG encode failed");
-      // }
-
+      // =============================
+      // JPEG ENCODE + SAVE + RINGBUF
+      // =============================
+      std::vector<uint8_t> jpgBytes;
+      const unsigned char* src =
+          static_cast<const unsigned char*>(mono->GetData());
       const auto t_enc_start = clock::now();
-      auto t_enc_end = clock::now();
-      {
-        std::vector<uint8_t> jpgBytes;
-        const unsigned char* src =
-            static_cast<const unsigned char*>(mono->GetData());
-        const bool enc_ok = encodeJpegMono8(src, int(w), int(h), int(stride),
-                                            /*quality*/ 85, jpgBytes);
-        t_enc_end = clock::now();
 
-        if (enc_ok) {
-          // you already have this function
-          pushJpegToBuffer(std::move(jpgBytes), w, h, stride, /*channels*/ 1);
-        } else {
-          SPDLOG_WARN("[OPTICAL CAMERA] JPEG encode failed");
-        }
+      bool enc_ok = encodeJpegMono8(src, int(w), int(h), int(stride),
+                                    85, jpgBytes);
+      const auto t_enc_end = clock::now();
+
+      if (enc_ok) {
+        const std::string stem = make_filename();
+        savedPath = kOutputDir / (stem + ".jpg");
+
+        bool wrote_ok = writeBytes(savedPath, jpgBytes);
+        SPDLOG_INFO("[OPTICAL CAMERA] Saved JPEG: {}", savedPath.string());
+
+        pushJpegToBuffer(std::move(jpgBytes), w, h, stride, 1);
+      } else {
+        SPDLOG_WARN("[OPTICAL CAMERA] JPEG encode failed");
       }
 
-      try {
-        raw->Release();
-      } catch (...) {}
+      try { raw->Release(); } catch (...) {}
+
       const auto t_loop_end = clock::now();
       const auto loop_ms = ms(t_loop_end - t_loop_start);
       const auto cap_ms = ms(t_cap_end - t_cap_start);
-      const auto enq_us = us(t_enq_end - t_enq_start);  // higher resolution
+      const auto enq_us = us(t_enq_end - t_enq_start);
       const auto enc_us = us(t_enc_end - t_enc_start);
 
       SPDLOG_INFO(
-          "[OPTICAL CAMERA] loop={}ms capture={}ms enqueue={}us raw={}B "
-          "encode={}us",
+          "[OPTICAL CAMERA] loop={}ms capture={}ms enqueue={}us raw={}B encode={}us",
           loop_ms, cap_ms, enq_us, raw_sz, enc_us);
     }
   } catch (...) {
     SPDLOG_ERROR("[OPTICAL CAMERA] Fatal error in run()");
   }
-  try {
-    if (started_acq && cam)
-      cam->EndAcquisition();
-  } catch (...) {}
-  try {
-    if (cam)
-      cam->DeInit();
-  } catch (...) {}
-  try {
-    cam = nullptr;
-  } catch (...) {}
-  try {
-    camList.Clear();
-  } catch (...) {}
-  try {
-    if (system)
-      system->ReleaseInstance();
-  } catch (...) {}
+
+  try { if (started_acq && cam) cam->EndAcquisition(); } catch (...) {}
+  try { if (cam) cam->DeInit(); } catch (...) {}
+  try { cam = nullptr; } catch (...) {}
+  try { camList.Clear(); } catch (...) {}
+  try { if (system) system->ReleaseInstance(); } catch (...) {}
 }
 }  // namespace sober::camera
