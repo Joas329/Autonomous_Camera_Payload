@@ -1,6 +1,5 @@
 add_subdirectory(communicator)
 add_subdirectory(main)
-add_subdirectory(housekeeping)
 add_subdirectory(logger)
 add_subdirectory(camera)
 add_subdirectory(health)
