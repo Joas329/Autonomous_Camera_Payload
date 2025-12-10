@@ -20,6 +20,8 @@ public:
 
     void startExperiment();
     void stopExperiment();
+    void stopOpticalCamera();
+    void startOpticalCamera();
 
 private:
     std::atomic<bool> experimentRunning_{false};
@@ -35,6 +37,5 @@ private:
     std::unique_ptr<sober::camera::IRCamera> irCamera_;
 
     // helpers
-    void startOpticalCamera();
     void startIRCamera();
 };

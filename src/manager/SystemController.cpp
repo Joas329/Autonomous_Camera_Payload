@@ -20,7 +20,7 @@ void SystemController::start() {
 
     // Start the API
     static crow::SimpleApp app;
-    static sober::communicator::SoberApi api;
+    static sober::communicator::SoberApi api(*this);
 
     api.registerRoutes(app);
 
@@ -73,6 +73,16 @@ void SystemController::stopExperiment() {
     if (irCamera_) {
         irCamera_->stop();
         irCamera_.reset();
+    }
+}
+
+void SystemController::stopOpticalCamera() {
+    if (opticalCamera_) {
+        opticalCamera_->stop();
+        opticalCamera_.reset();
+        SPDLOG_INFO("[SYSTEM CONTROLLER] Optical camera stopped.");
+    } else {
+        SPDLOG_WARN("[SYSTEM CONTROLLER] Optical camera is not running.");
     }
 }
 
