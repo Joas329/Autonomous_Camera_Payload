@@ -16,7 +16,7 @@
 #include <spdlog/spdlog.h>
 #include <turbojpeg.h>
 
-#include "LastFrame.hpp"
+#include "camera/LastFrame.hpp"
 #include "logger/ImageLogger.hpp"
 
 namespace fs = std::filesystem;
