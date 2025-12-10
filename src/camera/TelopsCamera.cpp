@@ -99,7 +99,7 @@ void TelopsTriggerSystem::start() {
     m_running = true;
 
     // Start the main capture thread
-    m_thread = std::thread(&TelopsTriggerSystem::run, this);
+    // m_thread = std::thread(&TelopsTriggerSystem::run, this);
 
     // Start temperature monitoring thread
     StartTemperatureThread();
