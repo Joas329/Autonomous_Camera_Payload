@@ -15,9 +15,6 @@
 
 #include "spdlog/spdlog.h"
 
-#include "eventbus/Event.hpp"
-#include "eventbus/EventBus.hpp"
-
 namespace sober::logger {
 
 void info(const std::string& message) {

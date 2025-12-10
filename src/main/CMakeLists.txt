@@ -10,6 +10,7 @@ target_link_libraries(sober_main_app
   PRIVATE
     manager
     camera
+    communicator
     logger
     spdlog::spdlog_header_only
 

@@ -1,22 +1,36 @@
 #include "manager/SystemController.hpp"
-
+#include "communicator/SoberApi.hpp"
+#include <crow.h>
 #include <spdlog/spdlog.h>
 
 SystemController::SystemController()
-    : eventBus_(),
-      logger_(sober::logger::Logger::instance())
+    : logger_(sober::logger::Logger::instance())
 {
 }
 
 SystemController::~SystemController() {
     stop();
 }
-
+ 
 void SystemController::start() {
     SPDLOG_INFO("[SYSTEM CONTROLLER] Starting system...");
     std::cout << "Initial Entry of the program here." << std::endl;
     logger_.start();
     startExperiment();
+
+    // Start the API
+    static crow::SimpleApp app;
+    static sober::communicator::SoberApi api;
+
+    api.registerRoutes(app);
+
+    std::thread apiThread([] {
+        app.port(8080)
+           .multithreaded()
+           .run();
+    });
+
+    apiThread.detach();
 }
 
 void SystemController::stop() {
@@ -37,7 +51,7 @@ void SystemController::startExperiment() {
 
     SPDLOG_INFO("[SYSTEM CONTROLLER] Starting experiment...");
 
-    startOpticalCamera();
+    // startOpticalCamera();
     //startIRCamera();
 }
 

@@ -87,6 +87,7 @@ add_subdirectory(src/camera)
 add_subdirectory(src/logger)
 add_subdirectory(src/manager)
 add_subdirectory(src/main)     # builds final executable
+add_subdirectory(src/communicator)
 
 #--------------------------------------------------
 # RPATH for running natively on Raspberry Pi
