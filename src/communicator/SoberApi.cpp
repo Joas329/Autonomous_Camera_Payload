@@ -1,6 +1,8 @@
 #define ASIO_STANDALONE
 #include <crow.h>
+#include <crow/json.h>
 
+#include "manager/SystemController.hpp"
 #include "communicator/SoberApi.hpp"
 #include "manager/SystemController.hpp"
 #include <iostream>
@@ -84,6 +86,28 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
             reinterpret_cast<const char*>(frame->data()),
             frame->size()
         );
+
+        return r;
+    });
+
+    CROW_ROUTE(app, "/system/status").methods(crow::HTTPMethod::GET)
+    ([this] {
+
+        const auto status = controller_.collectSystemStatus();
+
+        crow::json::wvalue json;
+        json["utc_now"]       = status.utc_iso;
+        json["cpu_temp_c"]    = status.cpu_temp_c;
+        json["cpu_load_pct"]  = status.cpu_load_pct;
+        json["disk_used_gb"]  = status.disk_used_gb;
+        json["disk_total_gb"] = status.disk_total_gb;
+        json["uptime_s"]      = status.uptime_s;
+
+        crow::response r;
+        r.code = 200;
+        r.set_header("Content-Type", "application/json");
+        r.set_header("Access-Control-Allow-Origin", "*");
+        r.body = json.dump();
 
         return r;
     });
