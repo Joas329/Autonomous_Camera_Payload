@@ -66,6 +66,27 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
         r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
+
+    CROW_ROUTE(app, "/camera/optical/last_frame").methods(crow::HTTPMethod::GET)
+    ([this] {
+
+        auto frame = controller_.getLastOpticalFrame();
+        if (!frame.has_value()) {
+            return crow::response(404, "No frame available");
+        }
+
+        crow::response r;
+        r.code = 200;
+        r.set_header("Content-Type", "image/jpeg");
+        r.set_header("Access-Control-Allow-Origin", "*");
+
+        r.body = std::string(
+            reinterpret_cast<const char*>(frame->data()),
+            frame->size()
+        );
+
+        return r;
+    });
 }
 
 } // namespace sober::communicator
