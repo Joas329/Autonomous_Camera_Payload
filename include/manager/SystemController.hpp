@@ -2,6 +2,9 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <vector>
+#include <cstdint>
 
 #include "eventbus/EventBus.hpp"
 #include "logger/Logger.hpp"
@@ -22,6 +25,7 @@ public:
     void stopExperiment();
     void stopOpticalCamera();
     void startOpticalCamera();
+    std::optional<std::vector<uint8_t>> getLastOpticalFrame() const;
 
 private:
     std::atomic<bool> experimentRunning_{false};

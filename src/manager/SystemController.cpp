@@ -1,7 +1,13 @@
 #include "manager/SystemController.hpp"
 #include "communicator/SoberApi.hpp"
 #include <crow.h>
+#include <filesystem>
+#include <fstream>
+#include <vector>
+#include <algorithm>
 #include <spdlog/spdlog.h>
+
+namespace fs = std::filesystem;
 
 SystemController::SystemController()
     : logger_(sober::logger::Logger::instance())
@@ -11,7 +17,7 @@ SystemController::SystemController()
 SystemController::~SystemController() {
     stop();
 }
- 
+
 void SystemController::start() {
     SPDLOG_INFO("[SYSTEM CONTROLLER] Starting system...");
     std::cout << "Initial Entry of the program here." << std::endl;
@@ -104,4 +110,53 @@ void SystemController::startIRCamera() {
     } else {
         SPDLOG_ERROR("[SYSTEM CONTROLLER] Failed to start IR camera.");
     }
+}
+
+std::optional<std::vector<uint8_t>> SystemController::getLastOpticalFrame() const
+{
+    if (!opticalCamera_) {
+        return std::nullopt;
+    }
+
+    const fs::path imgDir = "/home/sober/Autonomous_Control/images";
+
+    if (!fs::exists(imgDir) || !fs::is_directory(imgDir)) {
+        return std::nullopt;
+    }
+
+    fs::path newest;
+    std::filesystem::file_time_type newestTime;
+
+    for (const auto& e : fs::directory_iterator(imgDir)) {
+        if (!e.is_regular_file())
+            continue;
+
+        if (e.path().extension() != ".jpg")
+            continue;
+
+        const auto t = fs::last_write_time(e);
+        if (newest.empty() || t > newestTime) {
+            newest = e.path();
+            newestTime = t;
+        }
+    }
+
+    if (newest.empty()) {
+        return std::nullopt;
+    }
+
+    std::ifstream ifs(newest, std::ios::binary | std::ios::ate);
+    if (!ifs) {
+        return std::nullopt;
+    }
+
+    const std::streamsize size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> data(size);
+    if (!ifs.read(reinterpret_cast<char*>(data.data()), size)) {
+        return std::nullopt;
+    }
+
+    return data;
 }
