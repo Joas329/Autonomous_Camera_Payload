@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <sys/statvfs.h> 
 #include <spdlog/spdlog.h>
 
 namespace fs = std::filesystem;
@@ -159,4 +160,89 @@ std::optional<std::vector<uint8_t>> SystemController::getLastOpticalFrame() cons
     }
 
     return data;
+}
+
+// -------------------- CPU TEMP --------------------
+static double read_cpu_temp_c()
+{
+    std::ifstream ifs("/sys/class/thermal/thermal_zone0/temp");
+    double milli;
+    ifs >> milli;
+    return milli / 1000.0;
+}
+
+// -------------------- CPU LOAD --------------------
+static double read_cpu_load_pct()
+{
+    static uint64_t last_idle = 0, last_total = 0;
+
+    std::ifstream ifs("/proc/stat");
+    std::string cpu;
+    uint64_t user, nice, system, idle, iowait, irq, softirq, steal;
+
+    ifs >> cpu >> user >> nice >> system >> idle
+        >> iowait >> irq >> softirq >> steal;
+
+    const uint64_t idle_now = idle + iowait;
+    const uint64_t total_now =
+        user + nice + system + idle + iowait + irq + softirq + steal;
+
+    const uint64_t delta_idle = idle_now - last_idle;
+    const uint64_t delta_total = total_now - last_total;
+
+    last_idle = idle_now;
+    last_total = total_now;
+
+    if (delta_total == 0) return 0.0;
+
+    return 100.0 * (1.0 - (double)delta_idle / delta_total);
+}
+
+// -------------------- DISK USAGE --------------------
+static void read_disk_usage_gb(double& used, double& total)
+{
+    struct statvfs fs {};
+    statvfs("/", &fs);
+
+    const double block = fs.f_frsize;
+    total = fs.f_blocks * block / 1e9;
+    const double free = fs.f_bfree * block / 1e9;
+    used = total - free;
+}
+
+// -------------------- UPTIME --------------------
+static double read_uptime_s()
+{
+    std::ifstream ifs("/proc/uptime");
+    double uptime;
+    ifs >> uptime;
+    return uptime;
+}
+
+// -------------------- UTC TIME --------------------
+static std::string utc_now_iso()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    std::tm tm {};
+    gmtime_r(&ts.tv_sec, &tm);
+
+    char buf[32];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
+    return std::string(buf);
+}
+
+// ==================== PUBLIC API ====================
+SystemStatus SystemController::collectSystemStatus() const
+{
+    SystemStatus s{};
+
+    s.cpu_temp_c   = read_cpu_temp_c();
+    s.cpu_load_pct = read_cpu_load_pct();
+    read_disk_usage_gb(s.disk_used_gb, s.disk_total_gb);
+    s.uptime_s     = read_uptime_s();
+    s.utc_iso      = utc_now_iso();
+
+    return s;
 }

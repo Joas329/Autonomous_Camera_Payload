@@ -6,6 +6,8 @@
 #include <vector>
 #include <cstdint>
 
+#include "SystemStatus.hpp"
+
 #include "eventbus/EventBus.hpp"
 #include "logger/Logger.hpp"
 
@@ -25,6 +27,7 @@ public:
     void stopExperiment();
     void stopOpticalCamera();
     void startOpticalCamera();
+    SystemStatus collectSystemStatus() const;
     std::optional<std::vector<uint8_t>> getLastOpticalFrame() const;
 
 private:
