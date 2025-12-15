@@ -1,11 +1,37 @@
 #define ASIO_STANDALONE
 #include <crow.h>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <filesystem>
 #include <crow/json.h>
 
 #include "manager/SystemController.hpp"
 #include "communicator/SoberApi.hpp"
 #include "manager/SystemController.hpp"
-#include <iostream>
+
+static crow::response serve_file(
+    const std::string& path,
+    const std::string& content_type = "text/html"
+) {
+    if (!std::filesystem::exists(path)) {
+        return crow::response(404);
+    }
+
+    std::ifstream ifs(path, std::ios::binary);
+    if (!ifs) {
+        return crow::response(500);
+    }
+
+    std::ostringstream oss;
+    oss << ifs.rdbuf();
+
+    crow::response r;
+    r.code = 200;
+    r.set_header("Content-Type", content_type);
+    r.body = oss.str();
+    return r;
+}
 
 namespace sober::communicator {
 
@@ -15,12 +41,28 @@ SoberApi::SoberApi(SystemController& controller)
 
 void SoberApi::registerRoutes(crow::SimpleApp& app)
 {
+    CROW_ROUTE(app, "/")([] {
+        return serve_file("ui/control_panel.html", "text/html");
+    });
+
+    CROW_ROUTE(app, "/ui/<path>")
+    ([](const std::string& path) {
+        const std::string fullPath = "ui/" + path;
+
+        if (path.ends_with(".js"))
+            return serve_file(fullPath, "application/javascript");
+        if (path.ends_with(".css"))
+            return serve_file(fullPath, "text/css");
+        if (path.ends_with(".html"))
+            return serve_file(fullPath, "text/html");
+
+        return crow::response(404);
+    });
+
     // Test endpoint
     CROW_ROUTE(app, "/hello")([] {
         crow::response r("Hello from API!");
         r.code = 200;
-        r.add_header("Content-Type", "text/plain");
-        r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
 
@@ -32,8 +74,6 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
 
         crow::response r("Optical camera ON");
         r.code = 200;
-        r.add_header("Content-Type", "text/plain");
-        r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
 
@@ -44,8 +84,6 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
 
         crow::response r("Optical camera OFF");
         r.code = 200;
-        r.add_header("Content-Type", "text/plain");
-        r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
 
@@ -54,8 +92,6 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
     ([] {
         crow::response r("Optical image captured");
         r.code = 200;
-        r.add_header("Content-Type", "text/plain");
-        r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
 
@@ -64,8 +100,6 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
     ([] {
         crow::response r("API ONLINE");
         r.code = 200;
-        r.add_header("Content-Type", "text/plain");
-        r.add_header("Access-Control-Allow-Origin", "*");
         return r;
     });
 
