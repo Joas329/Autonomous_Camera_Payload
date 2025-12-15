@@ -42,6 +42,7 @@ SoberApi::SoberApi(SystemController& controller)
 void SoberApi::registerRoutes(crow::SimpleApp& app)
 {
     CROW_ROUTE(app, "/")([] {
+        SPDLOG_INFO("CWD = {}", std::filesystem::current_path().string());
         return serve_file("ui/control_panel.html", "text/html");
     });
 
