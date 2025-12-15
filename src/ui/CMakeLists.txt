@@ -1,0 +1,8 @@
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION ${SOBER_INSTALL_ROOT}/ui
+    FILES_MATCHING
+    PATTERN "*.html"
+    PATTERN "*.js"
+    PATTERN "*.css"
+)
