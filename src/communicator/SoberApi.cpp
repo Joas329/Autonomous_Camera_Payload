@@ -71,7 +71,7 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
     CROW_ROUTE(app, "/camera/opt/on").methods("POST"_method)
     ([this] {
         // Run camera start in background to avoid blocking UI
-        std::thread([this] { controller_.startOpticalCamera(); }).detach();
+        std::thread([this] { controller_.startAcquisition(); }).detach();
 
         crow::response r("Optical camera ON");
         r.code = 200;
@@ -81,7 +81,7 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
     // Turn OFF optical camera
     CROW_ROUTE(app, "/camera/opt/off").methods("POST"_method)
     ([this] {
-        std::thread([this] { controller_.stopOpticalCamera(); }).detach();
+        std::thread([this] { controller_.stopAcquisition(); }).detach();
 
         crow::response r("Optical camera OFF");
         r.code = 200;
