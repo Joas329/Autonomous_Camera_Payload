@@ -12,6 +12,7 @@
 #include "logger/Logger.hpp"
 
 #include "camera/OpticalCamera.hpp"
+#include "camera/OpticalSensor.hpp"
 #include "camera/IRCamera.hpp"
 #include "camera/Ticker.hpp"
 
@@ -27,6 +28,8 @@ public:
     void stopExperiment();
     void stopOpticalCamera();
     void startOpticalCamera();
+    void startAcquisition();
+    void stopAcquisition();
     SystemStatus collectSystemStatus() const;
     std::optional<std::vector<uint8_t>> getLastOpticalFrame() const;
 
@@ -40,7 +43,7 @@ private:
     sober::camera::Ticker ticker_{std::chrono::milliseconds(1000)};
 
     // Cameras
-    std::unique_ptr<sober::camera::OpticalCamera> opticalCamera_;
+    std::unique_ptr<sober::camera::FLIR_Blackfly_S> opticalCamera_;
     std::unique_ptr<sober::camera::IRCamera> irCamera_;
 
     // helpers

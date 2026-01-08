@@ -58,7 +58,7 @@ void SystemController::startExperiment() {
 
     SPDLOG_INFO("[SYSTEM CONTROLLER] Starting experiment...");
 
-    // startOpticalCamera();
+    startOpticalCamera();
     //startIRCamera();
 }
 
@@ -86,7 +86,6 @@ void SystemController::stopExperiment() {
 void SystemController::stopOpticalCamera() {
     if (opticalCamera_) {
         opticalCamera_->stop();
-        opticalCamera_.reset();
         SPDLOG_INFO("[SYSTEM CONTROLLER] Optical camera stopped.");
     } else {
         SPDLOG_WARN("[SYSTEM CONTROLLER] Optical camera is not running.");
@@ -94,12 +93,36 @@ void SystemController::stopOpticalCamera() {
 }
 
 void SystemController::startOpticalCamera() {
-    opticalCamera_ = std::make_unique<sober::camera::OpticalCamera>(ticker_);
+    opticalCamera_ = std::make_unique<sober::camera::FLIR_Blackfly_S>(ticker_);
 
     if (opticalCamera_->start()) {
         SPDLOG_INFO("[SYSTEM CONTROLLER] Optical camera started.");
     } else {
         SPDLOG_ERROR("[SYSTEM CONTROLLER] Failed to start optical camera.");
+    }
+}
+
+void SystemController::startAcquisition() {
+    if (opticalCamera_) {
+        if (opticalCamera_->startAcquisition()) {
+            SPDLOG_INFO("[SYSTEM CONTROLLER] Optical camera acquisition started.");
+        } else {
+            SPDLOG_ERROR("[SYSTEM CONTROLLER] Failed to start optical camera acquisition.");
+        }
+    } else {
+        SPDLOG_ERROR("[SYSTEM CONTROLLER] Optical camera is not initialized.");
+    }
+}
+
+void SystemController::stopAcquisition() {
+    if (opticalCamera_) {
+        if (opticalCamera_->stopAcquisition()) {
+            SPDLOG_INFO("[SYSTEM CONTROLLER] Optical camera acquisition stopped.");
+        } else {
+            SPDLOG_ERROR("[SYSTEM CONTROLLER] Failed to stop optical camera acquisition.");
+        }
+    } else {
+        SPDLOG_ERROR("[SYSTEM CONTROLLER] Optical camera is not initialized.");
     }
 }
 

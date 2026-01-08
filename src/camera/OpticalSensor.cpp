@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-//     Copyright (c) 2025, York Space Systems, All rights reserved.
+//     Copyright (c) 2026, York Space Systems, All rights reserved.
 //     FLIR Blackfly S BFS-U3-122S6C-C RGB camera driver
 //     Author: Joaquin Philco
 //
@@ -214,14 +214,7 @@ namespace sober::camera {
     }
 
     FLIR_Blackfly_S::~FLIR_Blackfly_S() {
-        // stop();
-
-        if (m_cam) {
-            m_cam->DeInit();
-            m_cam = nullptr;
-        }
-
-        m_system->ReleaseInstance();
+        stop();
     }
 
     bool FLIR_Blackfly_S::findFLIRCamera()
@@ -707,37 +700,28 @@ namespace sober::camera {
         SPDLOG_INFO("[OPTICAL] Camera thread exiting");
     }
 
-
     bool FLIR_Blackfly_S::stop()
     {
-        // Stop acquisition loop (if running) AND stop the thread
+        // request shutdown + wake thread
         m_running.store(false);
         m_state.store(CamState::Shutdown);
-
-        // Wake the thread if it's waiting
         m_conditionVariable.notify_all();
 
-        // Ask jthread to stop (sets stop_token)
-        if (m_optical_thread.joinable())
-        {
+        // stop + join thread
+        if (m_optical_thread.joinable()) {
             m_optical_thread.request_stop();
             m_optical_thread.join();
         }
 
-        // Cleanup after thread has exited (safe)
+        // After thread is dead, it's safe to touch camera/system
         try {
-            if (m_cam)
-            {
-                // EndAcquisition only if grabbing; otherwise it throws.
-                // If you have a way to query "is grabbing", use it.
-                // Otherwise just try/catch.
+            if (m_cam) {
                 try { m_cam->EndAcquisition(); } catch (...) {}
                 try { m_cam->DeInit(); } catch (...) {}
                 m_cam = nullptr;
             }
-            if (m_cam_list.GetSize() > 0) {
-                try { m_cam_list.Clear(); } catch (...) {}
-            }
+            try { m_cam_list.Clear(); } catch (...) {}
+
             if (m_system) {
                 try { m_system->ReleaseInstance(); } catch (...) {}
                 m_system = nullptr;
@@ -746,6 +730,7 @@ namespace sober::camera {
 
         return true;
     }
+
 
     bool FLIR_Blackfly_S::startAcquisition()
     {
@@ -799,5 +784,4 @@ namespace sober::camera {
         m_conditionVariable.notify_all();
         return true;
     }
-
 }
