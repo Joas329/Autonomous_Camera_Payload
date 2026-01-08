@@ -7,6 +7,7 @@ add_library(camera STATIC
     Ticker.cpp
     IRCamera.cpp
     TelopsCamera.cpp
+    OpticalSensor.cpp
 
     # Telops + eBUS sources
     ${CMAKE_SOURCE_DIR}/3rdparty/eBUS-telops/include/Telops/SerialCommunicationManager.cpp
