@@ -67,6 +67,29 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
         return r;
     });
 
+    // Change Output Directory in the PI
+    CROW_ROUTE(app, "/camera/opt/output_dir").methods("POST"_method)
+    ([this](const crow::request& req) {
+        auto body = crow::json::load(req.body);
+        if (!body) {
+            crow::response r("Invalid JSON body");
+            r.code = 400;
+            return r;
+        }
+        if (!body.has("path")) {
+            crow::response r("Missing field 'path'");
+            r.code = 400;
+            return r;
+        }
+        const std::string path = body["path"].s();
+
+        controller_.setOutputDirOptical(path);
+
+        crow::response r("Output directory set to " + path);
+        r.code = 200;
+        return r;
+    });
+
     // Turn ON optical camera
     CROW_ROUTE(app, "/camera/opt/on").methods("POST"_method)
     ([this] {

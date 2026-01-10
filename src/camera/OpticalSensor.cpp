@@ -192,7 +192,7 @@ static bool save_jpeg_from_image(
 namespace sober::camera {
     FLIR_Blackfly_S::FLIR_Blackfly_S(Ticker& tick)
         : m_running(false),
-          m_output_dir("/home/sober/Autonomous_Control/images"),
+          m_output_dir("/media/sober/KINGSTON/MCOP"),
           m_default_exposure_us(100000),
           m_min_exposure_us(1.0),
           m_max_exposure_us(1000000.0),
@@ -215,6 +215,28 @@ namespace sober::camera {
 
     FLIR_Blackfly_S::~FLIR_Blackfly_S() {
         stop();
+    }
+
+    bool FLIR_Blackfly_S::set_output_dir(const std::string& dir) {
+        if (!m_optical_thread.joinable()) {
+            SPDLOG_ERROR("[OPTICAL] set_output_dir: camera thread not running");
+            return false;
+        }
+        if (!m_cam) {
+            SPDLOG_ERROR("[OPTICAL] set_output_dir: camera not initialized");
+            return false;
+        }
+
+        if (m_state.load() == CamState::Acquiring) {
+            m_running.store(false);               // helps inner loop exit fast
+            m_state.store(CamState::Idle);        // your state machine “stop -> idle”
+        }
+
+        m_output_dir = dir;
+        SPDLOG_CRITICAL("[OPTICAL] Output directory set to: {}", m_output_dir);
+
+        m_conditionVariable.notify_all();
+        return true;
     }
 
     bool FLIR_Blackfly_S::findFLIRCamera()
@@ -845,7 +867,6 @@ namespace sober::camera {
         }
     }
 
-
     bool FLIR_Blackfly_S::stop()
     {
         // request shutdown + wake thread
@@ -876,7 +897,6 @@ namespace sober::camera {
 
         return true;
     }
-
 
     bool FLIR_Blackfly_S::startAcquisition()
     {
