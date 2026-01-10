@@ -192,7 +192,7 @@ static bool save_jpeg_from_image(
 namespace sober::camera {
     FLIR_Blackfly_S::FLIR_Blackfly_S(Ticker& tick)
         : m_running(false),
-          m_output_dir("/home/sober/Autonomous_Control/images"),
+          m_output_dir("/media/sober/KINGSTON/MCOP"),
           m_default_exposure_us(100000),
           m_min_exposure_us(1.0),
           m_max_exposure_us(1000000.0),
