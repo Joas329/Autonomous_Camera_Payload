@@ -1,6 +1,5 @@
 #pragma once
 
-// Correct forward declaration
 namespace crow {
     template <typename... Middlewares>
     class Crow;
@@ -8,13 +7,18 @@ namespace crow {
     using SimpleApp = Crow<>;
 }
 
+class SystemController;
+
 namespace sober::communicator {
 
 class SoberApi {
 public:
-    SoberApi() = default;
+    explicit SoberApi(::SystemController& controller);
 
     void registerRoutes(crow::SimpleApp& app);
+
+private:
+    ::SystemController& controller_;
 };
 
-}
+} // namespace sober::communicator

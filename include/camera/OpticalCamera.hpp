@@ -17,7 +17,7 @@ class OpticalCamera {
   ~OpticalCamera() = default;
 
   bool start();
-  void stop();
+  bool stop();
 
  private:
   void run(std::stop_token stoken);

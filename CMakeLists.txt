@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 project(Sober_on_board_module LANGUAGES C CXX)
 
+set(SOBER_INSTALL_ROOT
+    "/home/sober/Autonomous_Control/Autonomous_Camera_Payload/bin"
+    CACHE PATH "SOBER runtime install directory"
+)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -88,6 +93,7 @@ add_subdirectory(src/logger)
 add_subdirectory(src/manager)
 add_subdirectory(src/main)     # builds final executable
 add_subdirectory(src/communicator)
+add_subdirectory(src/ui)
 
 #--------------------------------------------------
 # RPATH for running natively on Raspberry Pi

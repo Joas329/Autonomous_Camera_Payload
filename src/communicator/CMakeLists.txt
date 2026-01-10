@@ -23,6 +23,7 @@ target_compile_definitions(communicator
 target_link_libraries(communicator
     PRIVATE
         logger
+        manager
     PUBLIC
         RingBuffer
 )

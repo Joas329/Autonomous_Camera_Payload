@@ -20,3 +20,7 @@ target_link_libraries(sober_main_app
     dl
     rt
 )
+install(
+    TARGETS sober_main_app
+    RUNTIME DESTINATION ${SOBER_INSTALL_ROOT}
+)
