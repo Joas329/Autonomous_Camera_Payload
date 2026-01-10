@@ -469,7 +469,7 @@ namespace sober::camera {
         }
     }
 
-    void FLIR_Blackfly_S::main_camera_thread(std::stop_token st)
+    void sober::camera::FLIR_Blackfly_S::main_camera_thread(std::stop_token st)
     {
         SPDLOG_INFO("[OPTICAL] Camera thread starting...");
 
@@ -488,34 +488,62 @@ namespace sober::camera {
             setup_camera();
 
             m_state.store(CamState::Idle);
-            SPDLOG_INFO("[OPTICAL] Camera configured; state=Idle (waiting for start)");
+            SPDLOG_INFO("[OPTICAL] Camera configured; state=Idle");
         } catch (const std::exception& e) {
             SPDLOG_ERROR("[OPTICAL] Setup failed: {}", e.what());
             m_state.store(CamState::Shutdown);
             return;
         }
 
-        // ---- Command loop: Idle <-> Acquiring until Shutdown ----
+        auto has_pending_cmds = [&]() -> bool {
+            std::lock_guard<std::mutex> lk(m_cmd_mtx);
+            return !m_cmd_q.empty();
+        };
+
+        // ---- Main thread loop: Idle <-> Acquiring until Shutdown ----
         while (!st.stop_requested())
         {
-            // 1) Wait until we should acquire or shutdown
+            const CamState s = m_state.load();
+            if (s == CamState::Shutdown) break;
+
+            // =========================
+            // IDLE: apply queued commands
+            // =========================
+            if (s == CamState::Idle)
             {
-                std::unique_lock<std::mutex> lk(m_mtx);
-                m_conditionVariable.wait(lk, [&] {
-                    const auto s = m_state.load();
-                    return st.stop_requested()
-                        || s == CamState::Acquiring
-                        || s == CamState::Shutdown;
-                });
+                // Only the camera thread should touch Spinnaker nodes.
+                // Apply any queued "set" commands here.
+                if (has_pending_cmds()) {
+                    try {
+                        apply_pending_commands();
+                    } catch (const std::exception& e) {
+                        SPDLOG_ERROR("[OPTICAL] apply_pending_commands() threw: {}", e.what());
+                    } catch (...) {
+                        SPDLOG_ERROR("[OPTICAL] apply_pending_commands() threw unknown exception");
+                    }
+                }
+
+                // Wait until:
+                //  - someone starts acquisition,
+                //  - shutdown,
+                //  - or a new command is queued (so we can apply it immediately while Idle).
+                {
+                    std::unique_lock<std::mutex> lk(m_mtx);
+                    m_conditionVariable.wait(lk, [&] {
+                        if (st.stop_requested()) return true;
+                        const auto stt = m_state.load();
+                        if (stt == CamState::Shutdown)  return true;
+                        if (stt == CamState::Acquiring) return true;
+                        // still idle
+                        return has_pending_cmds();
+                    });
+                }
+                continue;
             }
 
-            const auto state_now = m_state.load();
-            if (st.stop_requested() || state_now == CamState::Shutdown) {
-                SPDLOG_INFO("[OPTICAL] Stop requested; leaving thread main loop");
-                break;
-            }
-
-            // 2) Start acquisition when commanded
+            // =========================
+            // ACQUIRING
+            // =========================
             if (m_state.load() == CamState::Acquiring)
             {
                 SPDLOG_INFO("[OPTICAL] BeginAcquisition()");
@@ -529,15 +557,14 @@ namespace sober::camera {
                     SPDLOG_ERROR("[OPTICAL] BeginAcquisition failed: {}", e.what());
                     m_running.store(false);
                     m_state.store(CamState::Idle);
+                    m_conditionVariable.notify_all();
                     continue;
                 }
 
-                // 3) Acquisition loop (runs until stop acquisition or shutdown)
                 int frame_count = 0;
                 auto last_frame_time = std::chrono::steady_clock::now();
-
-                int consec_fail = 0;        // exceptions / null frames / incomplete
-                int consec_incomplete = 0;  // incomplete streak
+                int consec_fail = 0;
+                int consec_incomplete = 0;
 
                 auto restart_acquisition = [&]() {
                     SPDLOG_WARN("[OPTICAL] Restarting acquisition (consec_fail={})", consec_fail);
@@ -558,7 +585,7 @@ namespace sober::camera {
                     && m_state.load() == CamState::Acquiring
                     && m_running.load())
                 {
-                    // Trigger mode: idle-wait but remain responsive
+                    // Trigger mode: remain responsive
                     if (m_trigger_mode_enabled) {
                         std::unique_lock<std::mutex> lk(m_mtx);
                         m_conditionVariable.wait_for(lk, std::chrono::milliseconds(100), [&]{
@@ -569,29 +596,28 @@ namespace sober::camera {
                         continue;
                     }
 
-                    // ----- Throttle (same idea as your working run()) -----
-                    auto now = std::chrono::steady_clock::now();
-                    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time).count();
-                    if (elapsed_ms < m_throttle_ms) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(m_throttle_ms - elapsed_ms));
+                    // Throttle
+                    {
+                        const auto now = std::chrono::steady_clock::now();
+                        const auto elapsed_ms =
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time).count();
+                        if (elapsed_ms < m_throttle_ms) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(m_throttle_ms - elapsed_ms));
+                        }
                     }
 
-                    // ----- Grab with timeout -----
+                    // Grab
                     ImagePtr img;
                     try {
                         const unsigned timeout_ms = static_cast<unsigned>(
                             std::max<int>(static_cast<int>(m_throttle_ms) + 250, 1000)
                         );
                         img = m_cam->GetNextImage(timeout_ms);
-                        // OG_CRITICAL("[OPTICAL] GetNextImage() returned after {} ms", timeout_ms);
-
                     } catch (const std::exception& e) {
                         SPDLOG_ERROR("[OPTICAL] GetNextImage failed: {}", e.what());
                         ++consec_fail;
-                        std::this_thread::sleep_for(std::chrono::milliseconds(20)); // backoff to avoid hammering
-                        if (consec_fail >= 10) {
-                            restart_acquisition();
-                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                        if (consec_fail >= 10) restart_acquisition();
                         continue;
                     }
 
@@ -599,9 +625,7 @@ namespace sober::camera {
                         SPDLOG_WARN("[OPTICAL] GetNextImage returned null");
                         ++consec_fail;
                         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                        if (consec_fail >= 10) {
-                            restart_acquisition();
-                        }
+                        if (consec_fail >= 10) restart_acquisition();
                         continue;
                     }
 
@@ -611,30 +635,25 @@ namespace sober::camera {
                         ++consec_fail;
                         ++consec_incomplete;
                         try { img->Release(); } catch (...) {}
-                        if (consec_incomplete >= 10) {
-                            restart_acquisition();
-                        }
+                        if (consec_incomplete >= 10) restart_acquisition();
                         continue;
                     }
 
-                    // Success path resets failure counters
                     consec_fail = 0;
                     consec_incomplete = 0;
 
                     try {
-                        // Update last frame time ONLY after successful image retrieval
                         last_frame_time = std::chrono::steady_clock::now();
 
-                        // ---- Use camera timestamp for BOTH RAW and JPEG filenames ----
-                        const std::string stem = make_stem_from_image_timestamp(img, frame_count++);
                         const fs::path out_dir = fs::path(m_output_dir);
+                        const std::string stem = make_stem_from_image_timestamp(img, frame_count++);
 
-                        // ---- Save RAW (same as before, but uses stem) ----
+                        // RAW save (optional — keep if you still want it)
                         {
                             const uint8_t* data = static_cast<const uint8_t*>(img->GetData());
                             const size_t size = img->GetBufferSize();
-
                             const fs::path raw_path = out_dir / (stem + ".raw");
+
                             std::ofstream raw_file(raw_path, std::ios::binary);
                             if (!raw_file.write(reinterpret_cast<const char*>(data), size)) {
                                 SPDLOG_ERROR("[OPTICAL] Failed to save RAW: {}", raw_path.string());
@@ -643,30 +662,25 @@ namespace sober::camera {
                             }
                         }
 
-                        // ---- Save JPEG derived from the same camera frame ----
+                        // JPEG save
                         {
                             std::string jpeg_err;
-                            const bool jpeg_ok = save_jpeg_from_image(
-                                img,
-                                out_dir,
-                                stem,
-                                85,        // quality
-                                &jpeg_err
-                            );
-
-                            if (!jpeg_ok) {
-                                SPDLOG_WARN("[OPTICAL] JPEG save failed for stem='{}': {}", stem, jpeg_err);
+                            const bool ok = save_jpeg_from_image(img, out_dir, stem, 85, &jpeg_err);
+                            if (!ok) {
+                                SPDLOG_WARN("[OPTICAL] JPEG save failed (stem='{}'): {}", stem, jpeg_err);
                             }
                         }
 
-                        // IMPORTANT: always release
+                        // Always release acquired images (Spinnaker rule)
                         img->Release();
 
                     } catch (const std::exception& e) {
                         SPDLOG_ERROR("[OPTICAL] Error processing frame: {}", e.what());
                         try { img->Release(); } catch (...) {}
+                    } catch (...) {
+                        SPDLOG_ERROR("[OPTICAL] Error processing frame: unknown exception");
+                        try { img->Release(); } catch (...) {}
                     }
-
 
                     // Wakeable wait (lets stopAcquisition be responsive)
                     std::unique_lock<std::mutex> lk(m_mtx);
@@ -677,28 +691,160 @@ namespace sober::camera {
                     });
                 }
 
-                // 4) Stop acquisition cleanly
+                // Stop acquisition cleanly (Spinnaker rule: EndAcquisition must happen on same camera)
                 SPDLOG_INFO("[OPTICAL] EndAcquisition()");
                 try {
-                    if (started_acq) {
-                        m_cam->EndAcquisition();
-                    }
+                    if (started_acq) m_cam->EndAcquisition();
                 } catch (const std::exception& e) {
                     SPDLOG_WARN("[OPTICAL] EndAcquisition threw: {}", e.what());
+                } catch (...) {
+                    SPDLOG_WARN("[OPTICAL] EndAcquisition threw unknown exception");
                 }
 
                 m_running.store(false);
 
-                // If we were acquiring and got told to stop acquiring, go Idle.
-                if (m_state.load() != CamState::Shutdown && !st.stop_requested()) {
+                // If we weren't shutting down, go Idle and immediately process pending commands next loop.
+                if (!st.stop_requested() && m_state.load() != CamState::Shutdown) {
                     m_state.store(CamState::Idle);
                     SPDLOG_INFO("[OPTICAL] State=Idle (acquisition stopped)");
+                    m_conditionVariable.notify_all();
                 }
+
+                continue;
             }
+
+            // Fallback: if state is something unexpected, yield a bit.
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
 
         SPDLOG_INFO("[OPTICAL] Camera thread exiting");
     }
+
+    void FLIR_Blackfly_S::apply_pending_commands()
+    {
+        std::deque<Cmd> local;
+        {
+            std::lock_guard<std::mutex> lk(m_cmd_mtx);
+            local.swap(m_cmd_q);
+        }
+
+        for (auto& cmd : local)
+        {
+            std::visit([this](auto&& payload)
+            {
+                using T = std::decay_t<decltype(payload)>;
+
+                // ----------------------------
+                // Set Exposure
+                // ----------------------------
+                if constexpr (std::is_same_v<T, CmdSetExposure>)
+                {
+                    const double req = payload.exposure_us;
+                    auto& nodemap = m_cam->GetNodeMap();
+
+                    // Manual exposure
+                    CEnumerationPtr exp_auto = nodemap.GetNode("ExposureAuto");
+                    if (IsAvailable(exp_auto) && IsWritable(exp_auto)) {
+                        CEnumEntryPtr off = exp_auto->GetEntryByName("Off");
+                        if (IsAvailable(off) && IsReadable(off))
+                            exp_auto->SetIntValue(off->GetValue());
+                    }
+
+                    CFloatPtr exp = nodemap.GetNode("ExposureTime");
+                    if (!IsAvailable(exp) || !IsWritable(exp)) {
+                        SPDLOG_WARN("[OPTICAL] ExposureTime not writable/available");
+                        return;
+                    }
+
+                    const double minv = exp->GetMin();
+                    const double maxv = exp->GetMax();
+                    const double clamped = std::clamp(req, minv, maxv);
+
+                    exp->SetValue(clamped);
+
+                    double actual = clamped;
+                    if (IsReadable(exp)) actual = exp->GetValue();
+
+                    m_current_exposure_us = static_cast<float>(actual);
+
+                    SPDLOG_INFO("[OPTICAL] Exposure set: requested={}us clamped={}us actual={}us",
+                                req, clamped, actual);
+                }
+
+                // ----------------------------
+                // Set Frame Rate
+                // ----------------------------
+                else if constexpr (std::is_same_v<T, CmdSetFrameRate>)
+                {
+                    const double req_fps = payload.fps;
+                    auto& nodemap = m_cam->GetNodeMap();
+
+                    // Disable auto
+                    CEnumerationPtr fr_auto = nodemap.GetNode("AcquisitionFrameRateAuto");
+                    if (IsAvailable(fr_auto) && IsWritable(fr_auto)) {
+                        CEnumEntryPtr off = fr_auto->GetEntryByName("Off");
+                        if (IsAvailable(off) && IsReadable(off))
+                            fr_auto->SetIntValue(off->GetValue());
+                    }
+
+                    // Enable FPS control
+                    CBooleanPtr fr_enable = nodemap.GetNode("AcquisitionFrameRateEnable");
+                    if (IsAvailable(fr_enable) && IsWritable(fr_enable))
+                        fr_enable->SetValue(true);
+
+                    CFloatPtr fr = nodemap.GetNode("AcquisitionFrameRate");
+                    if (!IsAvailable(fr) || !IsWritable(fr)) {
+                        SPDLOG_WARN("[OPTICAL] AcquisitionFrameRate not writable/available");
+                        return;
+                    }
+
+                    const double minv = fr->GetMin();
+                    const double maxv = fr->GetMax();
+                    const double clamped = std::clamp(req_fps, minv, maxv);
+
+                    fr->SetValue(clamped);
+
+                    double actual = clamped;
+                    if (IsReadable(fr)) actual = fr->GetValue();
+
+                    m_current_fps = actual;
+
+                    SPDLOG_INFO("[OPTICAL] FPS set: requested={} clamped={} actual={}",
+                                req_fps, clamped, actual);
+                }
+
+                // ----------------------------
+                // Set Output Dir
+                // ----------------------------
+                else if constexpr (std::is_same_v<T, CmdSetOutputDir>)
+                {
+                    // This is NOT a Spinnaker node, so it's safe and simple here.
+                    m_output_dir = payload.dir;
+                    try {
+                        fs::create_directories(fs::path(m_output_dir));
+                    } catch (...) {}
+
+                    SPDLOG_INFO("[OPTICAL] Output dir set to '{}'", m_output_dir);
+                }
+
+                // ----------------------------
+                // Trigger Mode
+                // ----------------------------
+                else if constexpr (std::is_same_v<T, CmdSetTriggerMode>)
+                {
+                    try {
+                        configureTriggerMode(payload.enable);
+                        m_trigger_mode_enabled = payload.enable;
+                        SPDLOG_INFO("[OPTICAL] TriggerMode set: {}", payload.enable);
+                    } catch (const std::exception& e) {
+                        SPDLOG_ERROR("[OPTICAL] configureTriggerMode threw: {}", e.what());
+                    }
+                }
+
+            }, cmd.payload);
+        }
+    }
+
 
     bool FLIR_Blackfly_S::stop()
     {
@@ -784,4 +930,32 @@ namespace sober::camera {
         m_conditionVariable.notify_all();
         return true;
     }
+
+    bool FLIR_Blackfly_S::set_exposure_time(double exposure_us)
+    {
+        if (!m_optical_thread.joinable()) {
+            SPDLOG_ERROR("[OPTICAL] set_exposure_time: camera thread not running");
+            return false;
+        }
+        if (!m_cam) {
+            SPDLOG_ERROR("[OPTICAL] set_exposure_time: camera not initialized");
+            return false;
+        }
+
+        // enqueue command
+        {
+            std::lock_guard<std::mutex> lk(m_cmd_mtx);
+            m_cmd_q.push_back(Cmd{CmdType::SetExposure, CmdSetExposure{exposure_us}});
+        }
+
+        // request transition to Idle (if acquiring)
+        if (m_state.load() == CamState::Acquiring) {
+            m_running.store(false);               // helps inner loop exit fast
+            m_state.store(CamState::Idle);        // your state machine “stop -> idle”
+        }
+
+        m_conditionVariable.notify_all();
+        return true;
+    }
+
 }
