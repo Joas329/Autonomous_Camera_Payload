@@ -30,6 +30,7 @@ public:
     void startOpticalCamera();
     void startAcquisition();
     void stopAcquisition();
+    bool setExposureTimeOptical(double exposure_us);
     SystemStatus collectSystemStatus() const;
     std::optional<std::vector<uint8_t>> getLastOpticalFrame() const;
 

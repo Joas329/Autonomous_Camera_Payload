@@ -136,6 +136,15 @@ void SystemController::startIRCamera() {
     }
 }
 
+bool SystemController::setExposureTimeOptical(double exposure_us)
+{
+    if (!opticalCamera_) {
+        SPDLOG_WARN("[SYSTEM CONTROLLER] Optical camera not available");
+        return false;
+    }
+    return opticalCamera_->set_exposure_time(exposure_us);
+}
+
 std::optional<std::vector<uint8_t>> SystemController::getLastOpticalFrame() const
 {
     if (!opticalCamera_) {
