@@ -56,9 +56,6 @@
         </div>
     </div>
 
-    <!-- ⭐ END OF PRESERVED HEADER ⭐ -->
-
-    <!-- ⭐ NOW START THE LEFT/RIGHT LAYOUT ⭐ -->
     <div class="row">
         <!-- LEFT PANEL (Your entire control UI) -->
         <div class="col d-flex flex-column left-panel">
@@ -100,34 +97,56 @@
                     </div>
                 </div>
 
-                <!-- CAMERA CONFIGURATION -->
-                <div class="card-body shadow-sm mb-3">
-                    <div class="card-header bg-secondary text-white">
-                        <strong>Camera Configuration (Optical – Future Use)</strong>
-                    </div>
-                    <div class="card-body">
+          <!-- CAMERA CONFIGURATION -->
+          <div class="card-body shadow-sm mb-3">
+            <div class="card-header bg-secondary text-white">
+              <strong>Camera Configuration (Optical – Per-setting routes)</strong>
+            </div>
 
-                        <label>Exposure (ms)</label>
-                        <input class="form-control mb-2">
+            <div class="card-body">
+              <!-- Exposure -->
+              <label for="exposureMs">Exposure (ms)</label>
+              <div class="input-group mb-3">
+                <input id="exposureMs" class="form-control" type="number" step="0.1" min="0" placeholder="e.g. 5.0">
+                <button class="btn btn-primary" onclick="setExposureOptical()">Set Exposure</button>
+              </div>
 
-                        <label>Gain</label>
-                        <input class="form-control mb-2">
+              <!-- Gain (placeholder route button for future) -->
+              <!-- <label for="gainVal">Gain</label>
+              <div class="input-group mb-3">
+                <input id="gainVal" class="form-control" placeholder="(future)">
+                <button class="btn btn-outline-secondary" onclick="apiCall('/camera/opt/gain')">Set Gain</button>
+              </div> -->
 
-                        <label>Frame Rate (fps)</label>
-                        <input class="form-control mb-2">
+              <!-- FPS (placeholder route button for future) -->
+              <!-- <label for="fpsVal">Frame Rate (fps)</label>
+              <div class="input-group mb-3">
+                <input id="fpsVal" class="form-control" placeholder="(future)">
+                <button class="btn btn-outline-secondary" onclick="apiCall('/camera/opt/fps')">Set FPS</button>
+              </div> -->
 
-                        <label>ROI (x,y,w,h)</label>
-                        <input class="form-control mb-3" placeholder="0,0,1920,1080">
+              <!-- ROI (placeholder route button for future) -->
+              <!-- <label for="roiVal">ROI (x,y,w,h)</label>
+              <div class="input-group mb-3">
+                <input id="roiVal" class="form-control" placeholder="0,0,1920,1080">
+                <button class="btn btn-outline-secondary" onclick="apiCall('/camera/opt/roi')">Set ROI</button>
+              </div> -->
 
-                        <label>Trigger Mode</label>
-                        <select class="form-control mb-3">
-                            <option>Software</option>
-                            <option>Hardware</option>
-                        </select>
+              <!-- Trigger Mode (placeholder route button for future) -->
+              <!-- <label for="triggerMode">Trigger Mode</label>
+              <div class="input-group mb-3">
+                <select id="triggerMode" class="form-control">
+                  <option value="software">Software</option>
+                  <option value="hardware">Hardware</option>
+                </select>
+                <button class="btn btn-outline-secondary" onclick="apiCall('/camera/opt/trigger')">Set Trigger</button>
+              </div> -->
 
-                        <button class="btn btn-primary">Apply (placeholder)</button>
-                    </div>
-                </div>
+              <small class="text-muted">
+                Only <b>Set Exposure</b> is wired to the real route right now. The others are placeholders.
+              </small>
+            </div>
+          </div>
 
                 <!-- HOUSEKEEPING -->
                 <div class="card-body shadow-sm mb-3">
@@ -257,7 +276,6 @@ async function refreshFrame() {
     }
 }
 
-/* ✅ ADD THIS BELOW */
 async function refreshSystemStatus() {
     try {
         const res = await fetch(`${BASE}/system/status`);
