@@ -88,6 +88,75 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
         return r;
     });
 
+    // Set optical exposure (microseconds)
+    CROW_ROUTE(app, "/camera/opt/exposure").methods("POST"_method)
+    ([this](const crow::request& req) {
+
+        // --- Parse exposure_us from query or JSON body ---
+        double exposure_us = -1.0;
+
+        // A) Query string: ?us=12345
+        if (req.url_params.get("us")) {
+            try {
+                exposure_us = std::stod(req.url_params.get("us"));
+            } catch (...) {
+                crow::response r("Invalid 'us' query param");
+                r.code = 400;
+                return r;
+            }
+        }
+        // B) JSON body: { "us": 12345 }
+        else if (!req.body.empty()) {
+            auto body = crow::json::load(req.body);
+            if (!body) {
+                crow::response r("Invalid JSON body");
+                r.code = 400;
+                return r;
+            }
+            if (!body.has("us")) {
+                crow::response r("Missing field 'us'");
+                r.code = 400;
+                return r;
+            }
+            try {
+                exposure_us = body["us"].d();
+            } catch (...) {
+                crow::response r("Field 'us' must be a number");
+                r.code = 400;
+                return r;
+            }
+        } else {
+            crow::response r("Provide exposure as ?us=... or JSON {\"us\": ...}");
+            r.code = 400;
+            return r;
+        }
+
+        if (exposure_us <= 0.0) {
+            crow::response r("Exposure must be > 0 microseconds");
+            r.code = 400;
+            return r;
+        }
+
+        // --- Queue exposure command (non-blocking) ---
+        // No detached thread needed unless your set_exposure_time blocks (it shouldn't).
+        const bool ok = controller_.setExposureTimeOptical(exposure_us);
+        // or: opticalCamera_->set_exposure_time(exposure_us);
+
+        if (!ok) {
+            crow::response r("Failed to queue exposure command (camera not running?)");
+            r.code = 503; // service unavailable
+            return r;
+        }
+
+        crow::json::wvalue resp;
+        resp["status"] = "queued";
+        resp["exposure_us"] = exposure_us;
+
+        crow::response r(resp);
+        r.code = 200;
+        return r;
+    });
+
     // Capture optical (placeholder)
     CROW_ROUTE(app, "/camera/opt/capture").methods("POST"_method)
     ([] {
