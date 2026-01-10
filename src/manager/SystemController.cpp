@@ -145,6 +145,15 @@ bool SystemController::setExposureTimeOptical(double exposure_us)
     return opticalCamera_->set_exposure_time(exposure_us);
 }
 
+bool SystemController::setOutputDirOptical(const std::string& dir)
+{
+    if (!opticalCamera_) {
+        SPDLOG_WARN("[SYSTEM CONTROLLER] Optical camera not available");
+        return false;
+    }
+    return opticalCamera_->set_output_dir(dir);
+}
+
 std::optional<std::vector<uint8_t>> SystemController::getLastOpticalFrame() const
 {
     if (!opticalCamera_) {

@@ -217,6 +217,28 @@ namespace sober::camera {
         stop();
     }
 
+    bool FLIR_Blackfly_S::set_output_dir(const std::string& dir) {
+        if (!m_optical_thread.joinable()) {
+            SPDLOG_ERROR("[OPTICAL] set_output_dir: camera thread not running");
+            return false;
+        }
+        if (!m_cam) {
+            SPDLOG_ERROR("[OPTICAL] set_output_dir: camera not initialized");
+            return false;
+        }
+
+        if (m_state.load() == CamState::Acquiring) {
+            m_running.store(false);               // helps inner loop exit fast
+            m_state.store(CamState::Idle);        // your state machine “stop -> idle”
+        }
+
+        m_output_dir = dir;
+        SPDLOG_CRITICAL("[OPTICAL] Output directory set to: {}", m_output_dir);
+
+        m_conditionVariable.notify_all();
+        return true;
+    }
+
     bool FLIR_Blackfly_S::findFLIRCamera()
     {
         m_system = System::GetInstance();
@@ -845,7 +867,6 @@ namespace sober::camera {
         }
     }
 
-
     bool FLIR_Blackfly_S::stop()
     {
         // request shutdown + wake thread
@@ -876,7 +897,6 @@ namespace sober::camera {
 
         return true;
     }
-
 
     bool FLIR_Blackfly_S::startAcquisition()
     {
