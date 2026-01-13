@@ -32,6 +32,7 @@ public:
     void stopAcquisition();
     bool setExposureTimeOptical(double exposure_us);
     bool setOutputDirOptical(const std::string& dir);
+    bool setFrameRateOptical(double fps);
     SystemStatus collectSystemStatus() const;
     std::optional<std::vector<uint8_t>> getLastOpticalFrame() const;
 

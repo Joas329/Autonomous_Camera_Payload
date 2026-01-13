@@ -145,6 +145,15 @@ bool SystemController::setExposureTimeOptical(double exposure_us)
     return opticalCamera_->set_exposure_time(exposure_us);
 }
 
+bool SystemController::setFrameRateOptical(double fps)
+{
+    if (!opticalCamera_) {
+        SPDLOG_WARN("[SYSTEM CONTROLLER] Optical camera not available");
+        return false;
+    }
+    return opticalCamera_->set_frame_rate(fps);
+}
+
 bool SystemController::setOutputDirOptical(const std::string& dir)
 {
     if (!opticalCamera_) {

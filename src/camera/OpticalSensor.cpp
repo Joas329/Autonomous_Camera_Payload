@@ -831,7 +831,7 @@ namespace sober::camera {
 
                     m_current_fps = actual;
 
-                    SPDLOG_INFO("[OPTICAL] FPS set: requested={} clamped={} actual={}",
+                    SPDLOG_CRITICAL("[OPTICAL] FPS set: requested={} clamped={} actual={}",
                                 req_fps, clamped, actual);
                 }
 
@@ -970,8 +970,35 @@ namespace sober::camera {
 
         // request transition to Idle (if acquiring)
         if (m_state.load() == CamState::Acquiring) {
-            m_running.store(false);               // helps inner loop exit fast
-            m_state.store(CamState::Idle);        // your state machine “stop -> idle”
+            m_running.store(false);
+            m_state.store(CamState::Idle);
+        }
+
+        m_conditionVariable.notify_all();
+        return true;
+    }
+
+    bool FLIR_Blackfly_S::set_frame_rate(double fps)
+    {
+        if (!m_optical_thread.joinable()) {
+            SPDLOG_ERROR("[OPTICAL] set_frame_rate: camera thread not running");
+            return false;
+        }
+        if (!m_cam) {
+            SPDLOG_ERROR("[OPTICAL] set_frame_rate: camera not initialized");
+            return false;
+        }
+
+        // enqueue command
+        {
+            std::lock_guard<std::mutex> lk(m_cmd_mtx);
+            m_cmd_q.push_back(Cmd{CmdType::SetFrameRate, CmdSetFrameRate{fps}});
+        }
+
+        // request transition to Idle (if acquiring)
+        if (m_state.load() == CamState::Acquiring) {
+            m_running.store(false);
+            m_state.store(CamState::Idle);
         }
 
         m_conditionVariable.notify_all();
