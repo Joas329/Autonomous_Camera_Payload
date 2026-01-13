@@ -119,11 +119,11 @@
               </div> -->
 
               <!-- FPS (placeholder route button for future) -->
-              <!-- <label for="fpsVal">Frame Rate (fps)</label>
+              <label for="fpsVal">Frame Rate (fps)</label>
               <div class="input-group mb-3">
-                <input id="fpsVal" class="form-control" placeholder="(future)">
-                <button class="btn btn-outline-secondary" onclick="apiCall('/camera/opt/fps')">Set FPS</button>
-              </div> -->
+                <input id="fpsVal" class="form-control" type="number" step="0.1" min="0" placeholder="e.g. 5.0">
+                <button class="btn btn-primary" onclick="setExposureOptical()">Set FPS</button>
+              </div>
 
               <!-- ROI (placeholder route button for future) -->
               <!-- <label for="roiVal">ROI (x,y,w,h)</label>
@@ -301,7 +301,6 @@ async function refreshSystemStatus() {
 refreshSystemStatus();
 setInterval(refreshSystemStatus, 2000);
 </script>
-
 
 </body>
 </html>

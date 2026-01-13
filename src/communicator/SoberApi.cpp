@@ -180,6 +180,54 @@ void SoberApi::registerRoutes(crow::SimpleApp& app)
         return r;
     });
 
+    // Set Frame Rate (FPS)
+    CROW_ROUTE(app, "/camera/opt/framerate").methods("POST"_method)
+    ([this](const crow::request& req) {
+
+        double frame_rate_fps = -1.0;
+
+        // Query param
+        if (auto* fps = req.url_params.get("fps")) {
+            try {
+                frame_rate_fps = std::stod(fps);
+            } catch (...) {
+                return crow::response(400, "Invalid 'fps' query param");
+            }
+        }
+        // JSON body
+        else if (!req.body.empty()) {
+            auto body = crow::json::load(req.body);
+            if (!body || !body.has("fps")) {
+                return crow::response(400, "JSON must contain numeric field 'fps'");
+            }
+            frame_rate_fps = body["fps"].d();
+        }
+        else {
+            return crow::response(
+                400,
+                "Provide frame rate as ?fps=... or JSON {\"fps\": ...}"
+            );
+        }
+
+        if (frame_rate_fps <= 0.0) {
+            return crow::response(422, "Frame rate must be > 0 FPS");
+        }
+
+        const bool ok = controller_.setFrameRateOptical(frame_rate_fps);
+        if (!ok) {
+            return crow::response(
+                503,
+                "Failed to queue frame rate command (camera not running?)"
+            );
+        }
+
+        crow::json::wvalue resp;
+        resp["status"] = "queued";
+        resp["frame_rate_fps"] = frame_rate_fps;
+
+        return crow::response(200, resp);
+    });
+
     // Capture optical (placeholder)
     CROW_ROUTE(app, "/camera/opt/capture").methods("POST"_method)
     ([] {
