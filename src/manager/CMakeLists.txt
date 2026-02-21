@@ -1,7 +1,5 @@
 add_library(manager STATIC
-    CameraManager.cpp
     SystemController.cpp
-    CameraSynchronizer.cpp
 )
 
 target_include_directories(manager 

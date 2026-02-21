@@ -2,7 +2,6 @@ set(EBUS_SDK_INCLUDE_DIR /opt/pleora/ebus_sdk/linux-aarch64-arm/include)
 set(EBUS_SDK_LIB_DIR     /opt/pleora/ebus_sdk/linux-aarch64-arm/lib)
 
 add_library(camera STATIC
-    OpticalCamera.cpp
     LastFrame.cpp
     Ticker.cpp
     IRCamera.cpp
